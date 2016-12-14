@@ -23,7 +23,7 @@
     (define/public (get-transistor-count)
       transistor-count)
     
-    (define/public (set!-transistor-count value)
+    (define/public (set-transistor-count! value)
       (set! transistor-count value))
     
     (define/public (process) void)
@@ -44,7 +44,7 @@
   (class basic-element%
     (super-new)
     
-    (send this set!-transistor-count 1)
+    (send this set-transistor-count! 1)
     
     (send this set-input-interface! 'control 0)
     (send this set-input-interface! 'in 1)
@@ -72,7 +72,7 @@
     (define relais (make-object relais%))
     (send this set-input-interface! 'in 0)
     (send this set-output-interface! 'out 1)
-    (send this set!-transistor-count (send relais get-transistor-count))
+    (send this set-transistor-count! (send relais get-transistor-count))
     
     (define/override (set-input-interface! interface value)
       (hash-set! input-interfaces interface value)
@@ -96,7 +96,7 @@
     (send this set-input-interface! 'A-in 0)
     (send this set-input-interface! 'B-in 0)
     (send this set-output-interface! 'out 0)
-    (send this set!-transistor-count (+ (send relais1 get-transistor-count)
+    (send this set-transistor-count! (+ (send relais1 get-transistor-count)
                                         (send relais2 get-transistor-count)))
     
     (define/override (set-input-interface! interface value)
@@ -126,7 +126,7 @@
     (send this set-input-interface! 'A-in 0)
     (send this set-input-interface! 'B-in 0)
     (send this set-output-interface! 'out 0)
-    (send this set!-transistor-count (+ (get-field transistor-count relais1)
+    (send this set-transistor-count! (+ (get-field transistor-count relais1)
                                         (get-field transistor-count relais2)))
     
     (define/override (set-input-interface! interface value)
@@ -157,7 +157,7 @@
     (send this set-input-interface! 'A-in 0)
     (send this set-input-interface! 'B-in 0)
     (send this set-output-interface! 'out 1)
-    (send this set!-transistor-count (+ (get-field transistor-count relais1)
+    (send this set-transistor-count! (+ (get-field transistor-count relais1)
                                         (get-field transistor-count relais2)))
     
     (define/override (set-input-interface! interface value)
@@ -189,7 +189,7 @@
     (send this set-input-interface! 'A-in 0)
     (send this set-input-interface! 'B-in 0)
     (send this set-output-interface! 'out 0)
-    (send this set!-transistor-count (+ (send relais1 get-transistor-count)
+    (send this set-transistor-count! (+ (send relais1 get-transistor-count)
                                         (send relais2 get-transistor-count)))
     
     (define/override (set-input-interface! interface value)
@@ -224,7 +224,7 @@
     (send this set-input-interface! 'A-in 0)
     (send this set-input-interface! 'B-in 0)
     (send this set-output-interface! 'out 1)
-    (send this set!-transistor-count (+ (get-field transistor-count or-gate)
+    (send this set-transistor-count! (+ (get-field transistor-count or-gate)
                                         (get-field transistor-count nand-gate)
                                         (get-field transistor-count and-gate)))
     
@@ -248,47 +248,36 @@
     ))
 
 (define half-adder%
-  (class object%
+  (class basic-element%
     (super-new)
-    (init-field [A-in 0] [B-in 0] [Sum-out 0] [Carry-out 0])
     
-    (define/public (get-interface interface)
-      (cond ((eq? interface 'Sum-out) Sum-out)
-            ((eq? interface 'Carry-out) Carry-out)
-            (else (error "get-interface --- unknown interface name"))))
-    
-    (define/public (set!-interface interface value)
-      (cond ((eq? interface 'A-in)
-             (set! A-in value)
-             (send xor-gate set!-interface 'A-in value)
-             (send and-gate set!-interface 'A-in value))
-            ((eq? interface 'B-in)
-             (set! B-in value)
-             (send xor-gate set!-interface 'B-in value)
-             (send and-gate set!-interface 'B-in value))
-            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
-    
-    (define/public (set-input-fields! A-in-value B-in-value)
-      (set!-interface 'A-in A-in-value)
-      (set!-interface 'B-in B-in-value))
-    
-    (define/public (process)
-      (send xor-gate process)
-      (send and-gate process)
-      (set! Sum-out (send xor-gate get-interface 'out))
-      (set! Carry-out (send and-gate get-interface 'out)))
-    
-    (define/public (get-all-fields)
-      (list A-in B-in Carry-out Sum-out))
-    
-    (define/public (get-output-fields)
-      (list Carry-out Sum-out))
+    (inherit-field input-interfaces)
     
     (define xor-gate (new xor-gate%))
     (define and-gate (new and-gate%))
     
-    (field [transistor-count (+ (get-field transistor-count xor-gate)
-                                (get-field transistor-count and-gate))])
+    (send this set-input-interface! 'A-in 0)
+    (send this set-input-interface! 'B-in 0)
+    (send this set-output-interface! 'Sum-out 0)
+    (send this set-output-interface! 'Carry-out 0)
+    (send this set-transistor-count! (+ (get-field transistor-count xor-gate)
+                                        (get-field transistor-count and-gate)))
+    
+    (define/override (set-input-interface! interface value)
+      (hash-set! input-interfaces interface value)
+      (cond ((eq? interface 'A-in)
+             (send xor-gate set-input-interface! 'A-in value)
+             (send and-gate set-input-interface! 'A-in value))
+            ((eq? interface 'B-in)
+             (send xor-gate set-input-interface! 'B-in value)
+             (send and-gate set-input-interface! 'B-in value))
+            (else (eprintf "set-input-interface! --- unknown interface name ~a\n" interface))))
+    
+    (define/override (process)
+      (send xor-gate process)
+      (send and-gate process)
+      (send this set-output-interface! 'Sum-out (send xor-gate get-output-interface 'out))
+      (send this set-output-interface! 'Carry-out (send and-gate get-output-interface 'out)))
     ))
 
 
@@ -392,9 +381,9 @@
         )
       (send (list-ref full-adder-bank (sub1 BANKSIZE)) process)
       (set! Sum-out
-             (for/list ([i BANKSIZE])
-               (send (list-ref full-adder-bank i) get-interface 'Sum-out)
-               ))
+            (for/list ([i BANKSIZE])
+              (send (list-ref full-adder-bank i) get-interface 'Sum-out)
+              ))
       (set! Carry-out (send (list-ref full-adder-bank (sub1 BANKSIZE)) get-interface 'Carry-out))
       )
     
@@ -532,119 +521,126 @@
 (module+ test
   (require rackunit)
   
-  (define (test-basecase object input-test-list)
-    (let ((input-interfaces (caar input-test-list))
-          (output-interfaces (cadar input-test-list))
-          (test-values (cdr input-test-list)))
-      (for-each
-       (lambda (entry)
-         (let ((input-values (car entry))
-               (predicted-output-values (cadr entry)))
-           (for-each
-            (lambda (input-interface input-value)
-              (send object set-input-interface! input-interface input-value))
-            input-interfaces input-values)                
-           (send object process)
-           (let ((obtained-output-values
-                  (map
-                   (lambda (output-interface)
-                     (send object get-output-interface output-interface))
-                   output-interfaces)))
-             (check-equal? predicted-output-values obtained-output-values)
-             )))
-       test-values))
+  (define (test-data object input-interfaces output-interfaces test-values)
+    (for-each
+     (lambda (input-and-output-values-list)
+       (let ([input-values (car input-and-output-values-list)]
+             [predicted-output-values (cadr input-and-output-values-list)])
+         (for-each
+          (lambda (input-interface input-value)
+            (send object set-input-interface! input-interface input-value))
+          input-interfaces input-values)                
+         (send object process)
+         (let ([calculated-output-values
+                (map (lambda (output-interface)
+                       (send object get-output-interface output-interface))
+                     output-interfaces)])
+           (check-equal? predicted-output-values calculated-output-values)
+           )))
+     test-values)
+    )
+  
+  (define (test-input-output object input-output-test-list)
+    (let ([input-interfaces (caar input-output-test-list)]
+          [output-interfaces (cadar input-output-test-list)]
+          [test-values (cdr input-output-test-list)])
+      (test-data object input-interfaces output-interfaces test-values))
     )
   
   (test-case
    "relais"  
-   (test-basecase (new relais%) 
-                  '(((control in) (Q Q-bar))
-                    ((0 1) (0 1))
-                    ((1 1) (1 0))
-                    ((1 0) (0 0))
-                    ((0 0) (0 0))
-                    ))
+   (test-input-output (new relais%) 
+                      '(((control in) (Q Q-bar))
+                        ((0 1) (0 1))
+                        ((1 1) (1 0))
+                        ((1 0) (0 0))
+                        ((0 0) (0 0))
+                        ))
    (check-eq? (send (new relais%) get-transistor-count) 1)
    )
   
   (test-case
    "inverter"
-   (test-basecase (new inverter%)
-                  '(((in) (out))
-                    ((0) (1))
-                    ((1) (0))
-                    ))
+   (test-input-output (new inverter%)
+                      '(((in) (out))
+                        ((0) (1))
+                        ((1) (0))
+                        ))
    (check-eq? (send (new inverter%) get-transistor-count) 1)
    )
   
   (test-case
    "and-gate"
-   (test-basecase (new and-gate%)
-                  '(((A-in B-in) (out))
-                    ((0 0) (0))
-                    ((0 1) (0))
-                    ((1 0) (0))
-                    ((1 1) (1))
-                    ))
+   (test-input-output (new and-gate%)
+                      '(((A-in B-in) (out))
+                        ((0 0) (0))
+                        ((0 1) (0))
+                        ((1 0) (0))
+                        ((1 1) (1))
+                        ))
    (check-eq? (send (new and-gate%) get-transistor-count) 2)
    )
   
   (test-case
    "or-gate"
-   (test-basecase (new or-gate%)
-                  '(((A-in B-in) (out))
-                    ((0 0) (0))
-                    ((0 1) (1))
-                    ((1 0) (1))
-                    ((1 1) (1))
-                    ))
+   (test-input-output (new or-gate%)
+                      '(((A-in B-in) (out))
+                        ((0 0) (0))
+                        ((0 1) (1))
+                        ((1 0) (1))
+                        ((1 1) (1))
+                        ))
    (check-eq? (send (new or-gate%) get-transistor-count) 2)
    )
   
   (test-case
    "nand-gate"
-   (test-basecase (new nand-gate%)
-                  '(((A-in B-in) (out))
-                    ((0 0) (1))
-                    ((0 1) (1))
-                    ((1 0) (1))
-                    ((1 1) (0))
-                    ))
+   (test-input-output (new nand-gate%)
+                      '(((A-in B-in) (out))
+                        ((0 0) (1))
+                        ((0 1) (1))
+                        ((1 0) (1))
+                        ((1 1) (0))
+                        ))
    (check-eq? (send (new nand-gate%) get-transistor-count) 2)
    )
   
   (test-case
    "nor-gate"
-   (test-basecase (new nor-gate%)
-                  '(((A-in B-in) (out))
-                    ((0 0) (1))
-                    ((0 1) (0))
-                    ((1 0) (0))
-                    ((1 1) (0))
-                    ))
+   (test-input-output (new nor-gate%)
+                      '(((A-in B-in) (out))
+                        ((0 0) (1))
+                        ((0 1) (0))
+                        ((1 0) (0))
+                        ((1 1) (0))
+                        ))
    (check-eq? (send (new nor-gate%) get-transistor-count) 2)
    )
   
   (test-case
    "xor-gate"
-   (test-basecase (new xor-gate%)
-                  '(((A-in B-in) (out))
-                    ((0 0) (0))
-                    ((0 1) (1))
-                    ((1 0) (1))
-                    ((1 1) (0))
-                    ))
+   (test-input-output (new xor-gate%)
+                      '(((A-in B-in) (out))
+                        ((0 0) (0))
+                        ((0 1) (1))
+                        ((1 0) (1))
+                        ((1 1) (0))
+                        ))
    (check-eq? (send (new xor-gate%) get-transistor-count) 6)
    )
   
+  (test-case
+   "half-adder"
+   (test-input-output (new half-adder%)
+                      '(((A-in B-in) (Carry-out Sum-out))
+                        ((0 0) (0 0))
+                        ((0 1) (0 1))
+                        ((1 0) (0 1))
+                        ((1 1) (1 0))
+                        ))
+   (check-eq? (send (new half-adder%) get-transistor-count) 8)
+   )
   
-  ;    (test-basecase-old 'half-adder (new half-adder%)
-  ;                   '(((0 0) (0 0))
-  ;                     ((0 1) (0 1))
-  ;                     ((1 0) (0 1))
-  ;                     ((1 1) (1 0))
-  ;                     ))
-  ;    
   ;    (test-basecase-old 'full-adder (new full-adder%)
   ;                   '(((0 0 0) (0 0))
   ;                     ((0 0 1) (0 1))
@@ -682,5 +678,3 @@
   
   
   )
-
-;(new test%)
