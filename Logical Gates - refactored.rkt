@@ -25,6 +25,16 @@
     
     (define/public (set-transistor-count! value)
       (set! transistor-count value))
+
+    (define/public (initialize-input! interface-list value-list)
+      (for-each
+       (lambda (interface value) (send this set-input! interface value))
+       interface-list value-list))
+    
+    (define/public (initialize-output! interface-list value-list)
+      (for-each
+       (lambda (interface value) (send this set-output! interface value))
+       interface-list value-list))
     
     (define/public (process) void)
     ))
@@ -42,26 +52,26 @@
 
 (define relais%
   (class basic-element%
-    (super-new)
-    
+    (super-new)    
+
+    (send this initialize-input! '(control in) '(0 1))
+    (send this initialize-output! '(Q Q-bar) '(0 1))
     (send this set-transistor-count! 1)
     
-    (send this set-input! 'control 0)
-    (send this set-input! 'in 1)
-    (send this set-output! 'Q 0)
-    (send this set-output! 'Q-bar 1)
-    
     (define/override (process)
-      (if (= 0 (send this get-input 'in))
-          (begin (send this set-output! 'Q 0)
-                 (send this set-output! 'Q-bar 0))
-          (if (= 0 (send this get-input 'control))
-              (begin (send this set-output! 'Q 0)
-                     (send this set-output! 'Q-bar 1))
-              (begin (send this set-output! 'Q 1)
-                     (send this set-output! 'Q-bar 0)))))  
+      (cond ((= 0 (send this get-input 'in))
+             (send this set-output! 'Q 0)
+             (send this set-output! 'Q-bar 0))
+            ((= 1 (send this get-input 'in))
+             (cond ((= 0 (send this get-input 'control))
+                    (send this set-output! 'Q 0)
+                    (send this set-output! 'Q-bar 1))
+                   ((= 1 (send this get-input 'control))
+                    (send this set-output! 'Q 1)
+                    (send this set-output! 'Q-bar 0))
+                   (else (eprintf "incorrect input value --- relais%"))))
+            (else (eprintf "incorrect input value --- relais%"))))
     ))
-
 
 (define inverter%
   (class basic-element%
@@ -70,8 +80,9 @@
     (inherit-field input-table)
     
     (define relais (make-object relais%))
-    (send this set-input! 'in 0)
-    (send this set-output! 'out 1)
+    
+    (send this initialize-input! '(in) '(0))
+    (send this initialize-output! '(out) '(1))
     (send this set-transistor-count! (send relais get-transistor-count))
     
     (define/override (set-input! interface value)
@@ -93,9 +104,8 @@
     (define relais2 (make-object relais%))
     (define connector (make-object connector% relais1 'Q relais2 'in))
     
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'out 0)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(0))
     (send this set-transistor-count! (+ (send relais1 get-transistor-count)
                                         (send relais2 get-transistor-count)))
     
@@ -123,9 +133,8 @@
     (define relais1 (make-object relais%))
     (define relais2 (make-object relais%))
     
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'out 0)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(0))
     (send this set-transistor-count! (+ (get-field transistor-count relais1)
                                         (get-field transistor-count relais2)))
     
@@ -154,9 +163,8 @@
     (define relais1 (make-object relais%))
     (define relais2 (make-object relais%))
     
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'out 1)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(1))
     (send this set-transistor-count! (+ (get-field transistor-count relais1)
                                         (get-field transistor-count relais2)))
     
@@ -186,9 +194,8 @@
     (define relais2 (make-object relais%))
     (define connector (make-object connector% relais1 'Q-bar relais2 'in))
     
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'out 0)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(1))
     (send this set-transistor-count! (+ (send relais1 get-transistor-count)
                                         (send relais2 get-transistor-count)))
     
@@ -216,14 +223,11 @@
     (define or-gate (new or-gate%))
     (define nand-gate (new nand-gate%))
     (define and-gate (new and-gate%))
-    (define connector-1
-      (make-object connector% or-gate 'out and-gate 'A-in))
-    (define connector-2
-      (make-object connector% nand-gate 'out and-gate 'B-in))
+    (define connector-1 (make-object connector% or-gate 'out and-gate 'A-in))
+    (define connector-2 (make-object connector% nand-gate 'out and-gate 'B-in))
     
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'out 1)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(1))
     (send this set-transistor-count! (+ (get-field transistor-count or-gate)
                                         (get-field transistor-count nand-gate)
                                         (get-field transistor-count and-gate)))
@@ -256,10 +260,8 @@
     (define xor-gate (new xor-gate%))
     (define and-gate (new and-gate%))
     
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'Sum-out 0)
-    (send this set-output! 'Carry-out 0)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(Sum-out Carry-out) '(0 0))
     (send this set-transistor-count! (+ (get-field transistor-count xor-gate)
                                         (get-field transistor-count and-gate)))
     
@@ -290,18 +292,12 @@
     (define half-adder-1 (new half-adder%))
     (define half-adder-2 (new half-adder%))
     (define or-gate (new or-gate%))
-    (define connector-1
-      (make-object connector% half-adder-1 'Carry-out or-gate 'B-in))
-    (define connector-2
-      (make-object connector% half-adder-1 'Sum-out half-adder-2 'B-in))
-    (define connector-3
-      (make-object connector% half-adder-2 'Carry-out or-gate 'A-in))
+    (define connector-1 (make-object connector% half-adder-1 'Carry-out or-gate 'B-in))
+    (define connector-2 (make-object connector% half-adder-1 'Sum-out half-adder-2 'B-in))
+    (define connector-3 (make-object connector% half-adder-2 'Carry-out or-gate 'A-in))
     
-    (send this set-input! 'Carry-in 0)
-    (send this set-input! 'A-in 0)
-    (send this set-input! 'B-in 0)
-    (send this set-output! 'Sum-out 0)
-    (send this set-output! 'Carry-out 0)
+    (send this initialize-input! '(Carry-in A-in B-in) '(0 0 0))
+    (send this initialize-output! '(Sum-out Carry-out) '(0 0))
     (send this set-transistor-count! (+ (get-field transistor-count or-gate)
                                         (get-field transistor-count half-adder-1)
                                         (get-field transistor-count half-adder-2)))
@@ -328,77 +324,56 @@
     ))
 
 (define 8-bit-adder%
-  (class object%
+  (class basic-element%
     (super-new)
-    (init-field [Carry-in 0]
-                [A-in '(0 0 0 0 0 0 0 0)] ; Caution: least-significant bit is on the *left*
-                [B-in '(0 0 0 0 0 0 0 0)] ; To have correspondence with list-ref
-                [Sum-out '(0 0 0 0 0 0 0 0)]
-                [Carry-out 0])
+    
+    (inherit-field input-table)
     
     (define BANKSIZE 8)
     
-    (define/public (get-interface interface)
-      (cond ((eq? interface 'Sum-out) Sum-out)
-            ((eq? interface 'Carry-out) Carry-out)
-            (else (error "get-interface --- unknown interface name"))))
-    
-    (define/public (set!-interface interface value)
-      (cond ((eq? interface 'Carry-in)
-             (set! Carry-in value)
-             (send (list-ref full-adder-bank 0) set!-interface 'Carry-in value))
-            ((eq? interface 'A-in)
-             (set! A-in value)
-             (for ([i BANKSIZE])
-               (send (list-ref full-adder-bank i) set!-interface 'A-in (list-ref A-in i))))
-            ((eq? interface 'B-in)
-             (set! B-in value)
-             (for ([i BANKSIZE])
-               (send (list-ref full-adder-bank i) set!-interface 'B-in (list-ref B-in i))))
-            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
-    
-    (define/public (set-input-fields! Carry-in-value A-in-value B-in-value)
-      (set!-interface 'Carry-in Carry-in-value)
-      (set!-interface 'A-in (reverse A-in-value))
-      (set!-interface 'B-in (reverse B-in-value)))
-    
-    (define/public (process)
-      (for ([i (sub1 BANKSIZE)])
-        (send (list-ref full-adder-bank i) process)
-        (send (list-ref connector-list i) process)
-        )
-      (send (list-ref full-adder-bank (sub1 BANKSIZE)) process)
-      (set! Sum-out
-            (for/list ([i BANKSIZE])
-              (send (list-ref full-adder-bank i) get-interface 'Sum-out)
-              ))
-      (set! Carry-out (send (list-ref full-adder-bank (sub1 BANKSIZE)) get-interface 'Carry-out))
-      )
-    
-    (define/public (get-all-fields)
-      (list Carry-in (reverse A-in) (reverse B-in) Carry-out (reverse Sum-out)))
-    
-    (define/public (get-output-fields)
-      (list Carry-out (reverse Sum-out)))
-    
-    (define full-adder-bank
+    (define full-adder-bank ; 8 adders, numbered 0-7. 7 has the least significant bit
       (for/list ([i BANKSIZE])
         (new full-adder%)))
     
-    (define connector-list
+    (define connector-list ; 7 connectors
       (for/list ([i (sub1 BANKSIZE)])
         (make-object connector%
-          (list-ref full-adder-bank i) 'Carry-out
-          (list-ref full-adder-bank (add1 i)) 'Carry-in)))
+          (list-ref full-adder-bank (add1 i)) 'Carry-out
+          (list-ref full-adder-bank i) 'Carry-in)))
     
-    (field [transistor-count
-            (foldl
-             +
-             0
-             (map (lambda (adder)
-                    (get-field transistor-count adder))
-                  full-adder-bank)
-             )])
+    (send this initialize-input! '(Carry-in A-in B-in) '(0 (0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0)))
+    (send this initialize-output! '(Sum-out Carry-out) '((0 0 0 0 0 0 0 0) 0))
+    (send this set-transistor-count!
+          (foldl
+           +
+           0
+           (map (lambda (adder)
+                  (get-field transistor-count adder))
+                full-adder-bank)))         
+    
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
+      (cond ((eq? interface 'Carry-in)
+             (send (list-ref full-adder-bank (sub1 BANKSIZE)) set-input! 'Carry-in value))
+            ((eq? interface 'A-in)
+             (for ([i BANKSIZE])
+               (send (list-ref full-adder-bank i) set-input! 'A-in (list-ref value i))))
+            ((eq? interface 'B-in)
+             (for ([i BANKSIZE])
+               (send (list-ref full-adder-bank i) set-input! 'B-in (list-ref value i))))
+            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
+    
+    (define/override (process)
+      (for ([i (reverse (range 1 BANKSIZE))])
+        (send (list-ref full-adder-bank i) process)
+        (send (list-ref connector-list (sub1 i)) process)
+        )
+      (send (list-ref full-adder-bank 0) process)
+      (send this set-output! 'Sum-out
+            (for/list ([i BANKSIZE])
+              (send (list-ref full-adder-bank i) get-output 'Sum-out)))
+      (send this set-output! 'Carry-out (send (list-ref full-adder-bank 0)
+                                              get-output 'Carry-out)))        
     ))
 
 (define R-S-flip-flop%
@@ -634,13 +609,17 @@
                       18)
    )
   
-  ;    (test-basecase-old '8-bit-adder (new 8-bit-adder%)
-  ;                   '(((0 (0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0)) (0 (0 0 0 0 0 0 0 0)))
-  ;                     ((0 (0 0 0 0 1 0 0 1) (0 0 0 0 1 0 0 1)) (0 (0 0 0 1 0 0 1 0)))
-  ;                     ((1 (0 1 1 0 1 0 0 1) (0 1 0 1 1 0 1 1)) (0 (1 1 0 0 0 1 0 1)))
-  ;                     ((1 (1 1 1 1 1 1 1 1) (1 1 1 1 1 1 1 1)) (1 (1 1 1 1 1 1 1 1)))
-  ;                     ))
-  ;    
+  (test-case
+   "8-bit adder"
+   (test-input-output (new 8-bit-adder%)
+                      '(Carry-in A-in B-in) '(Carry-out Sum-out)
+                      '(((0 (0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0)) (0 (0 0 0 0 0 0 0 0)))
+                        ((0 (0 0 0 0 1 0 0 1) (0 0 0 0 1 0 0 1)) (0 (0 0 0 1 0 0 1 0)))
+                        ((1 (0 1 1 0 1 0 0 1) (0 1 0 1 1 0 1 1)) (0 (1 1 0 0 0 1 0 1)))
+                        ((1 (1 1 1 1 1 1 1 1) (1 1 1 1 1 1 1 1)) (1 (1 1 1 1 1 1 1 1))))
+                      144)
+   )
+  
   ;    (test-basecase-old 'R-S-flip-flop (new R-S-flip-flop%)
   ;                   '(((0 0) (1 0))
   ;                     ((0 1) (1 0))
@@ -659,4 +638,4 @@
   ;                     ))
   
   
-)
+  )
