@@ -4,27 +4,37 @@
   (class object%
     (super-new)
     
-    (field [input-interfaces (make-hash null)]
-           [output-interfaces (make-hash null)]
+    (field [input-table (make-hash null)]
+           [output-table (make-hash null)]
            [transistor-count 0])
     
-    (define/public (get-input-interface interface)
-      (hash-ref input-interfaces interface))
+    (define/public (get-input interface)
+      (hash-ref input-table interface))
     
-    (define/public (get-output-interface interface)
-      (hash-ref output-interfaces interface))
+    (define/public (get-output interface)
+      (hash-ref output-table interface))
     
-    (define/public (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value))
+    (define/public (set-input! interface value)
+      (hash-set! input-table interface value))
     
-    (define/public (set-output-interface! interface value)
-      (hash-set! output-interfaces interface value))
+    (define/public (set-output! interface value)
+      (hash-set! output-table interface value))
     
     (define/public (get-transistor-count)
       transistor-count)
     
     (define/public (set-transistor-count! value)
       (set! transistor-count value))
+    
+    (define/public (initialize-input! interface-list value-list)
+      (for-each
+       (lambda (interface value) (send this set-input! interface value))
+       interface-list value-list))
+    
+    (define/public (initialize-output! interface-list value-list)
+      (for-each
+       (lambda (interface value) (send this set-output! interface value))
+       interface-list value-list))
     
     (define/public (process) void)
     ))
@@ -36,206 +46,200 @@
                 to-neighbor to-neighbor-interface)
     
     (define/public (process)
-      (send to-neighbor set-input-interface! to-neighbor-interface
-            (send from-neighbor get-output-interface from-neighbor-interface)))
+      (send to-neighbor set-input! to-neighbor-interface
+            (send from-neighbor get-output from-neighbor-interface)))
     ))
 
-(define relais%
+(define relay%
   (class basic-element%
-    (super-new)
+    (super-new)    
     
+    (send this initialize-input! '(control in) '(0 1))
+    (send this initialize-output! '(Q Q-bar) '(0 1))
     (send this set-transistor-count! 1)
     
-    (send this set-input-interface! 'control 0)
-    (send this set-input-interface! 'in 1)
-    (send this set-output-interface! 'Q 0)
-    (send this set-output-interface! 'Q-bar 1)
-    
     (define/override (process)
-      (if (= 0 (send this get-input-interface 'in))
-          (begin (send this set-output-interface! 'Q 0)
-                 (send this set-output-interface! 'Q-bar 0))
-          (if (= 0 (send this get-input-interface 'control))
-              (begin (send this set-output-interface! 'Q 0)
-                     (send this set-output-interface! 'Q-bar 1))
-              (begin (send this set-output-interface! 'Q 1)
-                     (send this set-output-interface! 'Q-bar 0)))))  
+      (cond ((= 0 (send this get-input 'in))
+             (send this set-output! 'Q 0)
+             (send this set-output! 'Q-bar 0))
+            ((= 1 (send this get-input 'in))
+             (cond ((= 0 (send this get-input 'control))
+                    (send this set-output! 'Q 0)
+                    (send this set-output! 'Q-bar 1))
+                   ((= 1 (send this get-input 'control))
+                    (send this set-output! 'Q 1)
+                    (send this set-output! 'Q-bar 0))
+                   (else (eprintf "incorrect input value --- relay%"))))
+            (else (eprintf "incorrect input value --- relay%"))))
     ))
-
 
 (define inverter%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
-    (define relais (make-object relais%))
-    (send this set-input-interface! 'in 0)
-    (send this set-output-interface! 'out 1)
-    (send this set-transistor-count! (send relais get-transistor-count))
+    (define relay (make-object relay%))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
-      (send relais set-input-interface! 'control value)) 
+    (send this initialize-input! '(in) '(0))
+    (send this initialize-output! '(out) '(1))
+    (send this set-transistor-count! (send relay get-transistor-count))
+    
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
+      (send relay set-input! 'control value)) 
     
     (define/override (process)
-      (send relais process)
-      (send this set-output-interface! 'out (send relais get-output-interface 'Q-bar)))
+      (send relay process)
+      (send this set-output! 'out (send relay get-output 'Q-bar)))
     ))
 
 (define and-gate%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
-    (define relais1 (make-object relais%))
-    (define relais2 (make-object relais%))
-    (define connector (make-object connector% relais1 'Q relais2 'in))
+    (define relay1 (make-object relay%))
+    (define relay2 (make-object relay%))
+    (define connector (make-object connector% relay1 'Q relay2 'in))
     
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'out 0)
-    (send this set-transistor-count! (+ (send relais1 get-transistor-count)
-                                        (send relais2 get-transistor-count)))
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(0))
+    (send this set-transistor-count! (+ (send relay1 get-transistor-count)
+                                        (send relay2 get-transistor-count)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'A-in)
-             (send relais1 set-input-interface! 'control value))
+             (send relay1 set-input! 'control value))
             ((eq? interface 'B-in)
-             (send relais2 set-input-interface! 'control value))
+             (send relay2 set-input! 'control value))
             (else (eprintf "Unknown Interface Type")))) 
     
     (define/override (process)
-      (send relais1 process)
+      (send relay1 process)
       (send connector process)
-      (send relais2 process)
-      (send this set-output-interface! 'out (send relais2 get-output-interface 'Q)))    
+      (send relay2 process)
+      (send this set-output! 'out (send relay2 get-output 'Q)))    
     ))
 
 (define or-gate%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
-    (define relais1 (make-object relais%))
-    (define relais2 (make-object relais%))
+    (define relay1 (make-object relay%))
+    (define relay2 (make-object relay%))
     
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'out 0)
-    (send this set-transistor-count! (+ (get-field transistor-count relais1)
-                                        (get-field transistor-count relais2)))
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(0))
+    (send this set-transistor-count! (+ (get-field transistor-count relay1)
+                                        (get-field transistor-count relay2)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'A-in)
-             (send relais1 set-input-interface! 'control value))
+             (send relay1 set-input! 'control value))
             ((eq? interface 'B-in)
-             (send relais2 set-input-interface! 'control value))
+             (send relay2 set-input! 'control value))
             (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
     
     (define/override (process)
-      (send relais1 process)
-      (send relais2 process)
-      (send this set-output-interface! 'out
-            (max (send relais1 get-output-interface 'Q)
-                 (send relais2 get-output-interface 'Q))))
+      (send relay1 process)
+      (send relay2 process)
+      (send this set-output! 'out
+            (max (send relay1 get-output 'Q)
+                 (send relay2 get-output 'Q))))
     ))
 
 (define nand-gate%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
-    (define relais1 (make-object relais%))
-    (define relais2 (make-object relais%))
+    (define relay1 (make-object relay%))
+    (define relay2 (make-object relay%))
     
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'out 1)
-    (send this set-transistor-count! (+ (get-field transistor-count relais1)
-                                        (get-field transistor-count relais2)))
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(1))
+    (send this set-transistor-count! (+ (get-field transistor-count relay1)
+                                        (get-field transistor-count relay2)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'A-in)
-             (send relais1 set-input-interface! 'control value))
+             (send relay1 set-input! 'control value))
             ((eq? interface 'B-in)
-             (send relais2 set-input-interface! 'control value))
+             (send relay2 set-input! 'control value))
             (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
     
     (define/override (process)
-      (send relais1 process)
-      (send relais2 process)
-      (send this set-output-interface! 'out
-            (max (send relais1 get-output-interface 'Q-bar)
-                 (send relais2 get-output-interface 'Q-bar))))
+      (send relay1 process)
+      (send relay2 process)
+      (send this set-output! 'out
+            (max (send relay1 get-output 'Q-bar)
+                 (send relay2 get-output 'Q-bar))))
     ))
 
 (define nor-gate%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
-    (define relais1 (make-object relais%))
-    (define relais2 (make-object relais%))
-    (define connector (make-object connector% relais1 'Q-bar relais2 'in))
+    (define relay1 (make-object relay%))
+    (define relay2 (make-object relay%))
+    (define connector (make-object connector% relay1 'Q-bar relay2 'in))
     
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'out 0)
-    (send this set-transistor-count! (+ (send relais1 get-transistor-count)
-                                        (send relais2 get-transistor-count)))
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(1))
+    (send this set-transistor-count! (+ (send relay1 get-transistor-count)
+                                        (send relay2 get-transistor-count)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'A-in)
-             (send relais1 set-input-interface! 'control value))
+             (send relay1 set-input! 'control value))
             ((eq? interface 'B-in)
-             (send relais2 set-input-interface! 'control value))
+             (send relay2 set-input! 'control value))
             (else (eprintf "Unknown Interface Type")))) 
     
     (define/override (process)
-      (send relais1 process)
+      (send relay1 process)
       (send connector process)
-      (send relais2 process)
-      (send this set-output-interface! 'out (send relais2 get-output-interface 'Q-bar))) 
+      (send relay2 process)
+      (send this set-output! 'out (send relay2 get-output 'Q-bar))) 
     ))
 
 (define xor-gate%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
     (define or-gate (new or-gate%))
     (define nand-gate (new nand-gate%))
     (define and-gate (new and-gate%))
-    (define connector-1
-      (make-object connector% or-gate 'out and-gate 'A-in))
-    (define connector-2
-      (make-object connector% nand-gate 'out and-gate 'B-in))
+    (define connector-1 (make-object connector% or-gate 'out and-gate 'A-in))
+    (define connector-2 (make-object connector% nand-gate 'out and-gate 'B-in))
     
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'out 1)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(out) '(1))
     (send this set-transistor-count! (+ (get-field transistor-count or-gate)
                                         (get-field transistor-count nand-gate)
                                         (get-field transistor-count and-gate)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'A-in)
-             (send or-gate set-input-interface! 'A-in value)
-             (send nand-gate set-input-interface! 'A-in value))
+             (send or-gate set-input! 'A-in value)
+             (send nand-gate set-input! 'A-in value))
             ((eq? interface 'B-in)
-             (send or-gate set-input-interface! 'B-in value)
-             (send nand-gate set-input-interface! 'B-in value))
+             (send or-gate set-input! 'B-in value)
+             (send nand-gate set-input! 'B-in value))
             (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
     
     (define/override (process)
@@ -244,40 +248,38 @@
       (send connector-1 process)
       (send connector-2 process)
       (send and-gate process)
-      (send this set-output-interface! 'out (send and-gate get-output-interface 'out)))
+      (send this set-output! 'out (send and-gate get-output 'out)))
     ))
 
 (define half-adder%
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
     (define xor-gate (new xor-gate%))
     (define and-gate (new and-gate%))
     
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'Sum-out 0)
-    (send this set-output-interface! 'Carry-out 0)
+    (send this initialize-input! '(A-in B-in) '(0 0))
+    (send this initialize-output! '(Sum-out Carry-out) '(0 0))
     (send this set-transistor-count! (+ (get-field transistor-count xor-gate)
                                         (get-field transistor-count and-gate)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'A-in)
-             (send xor-gate set-input-interface! 'A-in value)
-             (send and-gate set-input-interface! 'A-in value))
+             (send xor-gate set-input! 'A-in value)
+             (send and-gate set-input! 'A-in value))
             ((eq? interface 'B-in)
-             (send xor-gate set-input-interface! 'B-in value)
-             (send and-gate set-input-interface! 'B-in value))
-            (else (eprintf "set-input-interface! --- unknown interface name ~a\n" interface))))
+             (send xor-gate set-input! 'B-in value)
+             (send and-gate set-input! 'B-in value))
+            (else (eprintf "set-input! --- unknown interface name ~a\n" interface))))
     
     (define/override (process)
       (send xor-gate process)
       (send and-gate process)
-      (send this set-output-interface! 'Sum-out (send xor-gate get-output-interface 'out))
-      (send this set-output-interface! 'Carry-out (send and-gate get-output-interface 'out)))
+      (send this set-output! 'Sum-out (send xor-gate get-output 'out))
+      (send this set-output! 'Carry-out (send and-gate get-output 'out)))
     ))
 
 
@@ -285,36 +287,30 @@
   (class basic-element%
     (super-new)
     
-    (inherit-field input-interfaces)
+    (inherit-field input-table)
     
     (define half-adder-1 (new half-adder%))
     (define half-adder-2 (new half-adder%))
     (define or-gate (new or-gate%))
-    (define connector-1
-      (make-object connector% half-adder-1 'Carry-out or-gate 'B-in))
-    (define connector-2
-      (make-object connector% half-adder-1 'Sum-out half-adder-2 'B-in))
-    (define connector-3
-      (make-object connector% half-adder-2 'Carry-out or-gate 'A-in))
+    (define connector-1 (make-object connector% half-adder-1 'Carry-out or-gate 'B-in))
+    (define connector-2 (make-object connector% half-adder-1 'Sum-out half-adder-2 'B-in))
+    (define connector-3 (make-object connector% half-adder-2 'Carry-out or-gate 'A-in))
     
-    (send this set-input-interface! 'Carry-in 0)
-    (send this set-input-interface! 'A-in 0)
-    (send this set-input-interface! 'B-in 0)
-    (send this set-output-interface! 'Sum-out 0)
-    (send this set-output-interface! 'Carry-out 0)
+    (send this initialize-input! '(Carry-in A-in B-in) '(0 0 0))
+    (send this initialize-output! '(Sum-out Carry-out) '(0 0))
     (send this set-transistor-count! (+ (get-field transistor-count or-gate)
                                         (get-field transistor-count half-adder-1)
                                         (get-field transistor-count half-adder-2)))
     
-    (define/override (set-input-interface! interface value)
-      (hash-set! input-interfaces interface value)
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
       (cond ((eq? interface 'Carry-in)
-             (send half-adder-2 set-input-interface! 'A-in value))
+             (send half-adder-2 set-input! 'A-in value))
             ((eq? interface 'A-in)
-             (send half-adder-1 set-input-interface! 'A-in value))
+             (send half-adder-1 set-input! 'A-in value))
             ((eq? interface 'B-in)
-             (send half-adder-1 set-input-interface! 'B-in value))
-            (else (eprintf "set-input-interface! --- unknown interface name ~a\n" interface))))
+             (send half-adder-1 set-input! 'B-in value))
+            (else (eprintf "set-input! --- unknown interface name ~a\n" interface))))
     
     (define/override (process)
       (send half-adder-1 process)
@@ -323,186 +319,133 @@
       (send half-adder-2 process)
       (send connector-3 process)
       (send or-gate process)
-      (send this set-output-interface! 'Sum-out (send half-adder-2 get-output-interface 'Sum-out))
-      (send this set-output-interface! 'Carry-out (send or-gate get-output-interface 'out)))
+      (send this set-output! 'Sum-out (send half-adder-2 get-output 'Sum-out))
+      (send this set-output! 'Carry-out (send or-gate get-output 'out)))
     ))
 
 (define 8-bit-adder%
-  (class object%
+  (class basic-element%
     (super-new)
-    (init-field [Carry-in 0]
-                [A-in '(0 0 0 0 0 0 0 0)] ; Caution: least-significant bit is on the *left*
-                [B-in '(0 0 0 0 0 0 0 0)] ; To have correspondence with list-ref
-                [Sum-out '(0 0 0 0 0 0 0 0)]
-                [Carry-out 0])
+    
+    (inherit-field input-table)
     
     (define BANKSIZE 8)
     
-    (define/public (get-interface interface)
-      (cond ((eq? interface 'Sum-out) Sum-out)
-            ((eq? interface 'Carry-out) Carry-out)
-            (else (error "get-interface --- unknown interface name"))))
-    
-    (define/public (set!-interface interface value)
-      (cond ((eq? interface 'Carry-in)
-             (set! Carry-in value)
-             (send (list-ref full-adder-bank 0) set!-interface 'Carry-in value))
-            ((eq? interface 'A-in)
-             (set! A-in value)
-             (for ([i BANKSIZE])
-               (send (list-ref full-adder-bank i) set!-interface 'A-in (list-ref A-in i))))
-            ((eq? interface 'B-in)
-             (set! B-in value)
-             (for ([i BANKSIZE])
-               (send (list-ref full-adder-bank i) set!-interface 'B-in (list-ref B-in i))))
-            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
-    
-    (define/public (set-input-fields! Carry-in-value A-in-value B-in-value)
-      (set!-interface 'Carry-in Carry-in-value)
-      (set!-interface 'A-in (reverse A-in-value))
-      (set!-interface 'B-in (reverse B-in-value)))
-    
-    (define/public (process)
-      (for ([i (sub1 BANKSIZE)])
-        (send (list-ref full-adder-bank i) process)
-        (send (list-ref connector-list i) process)
-        )
-      (send (list-ref full-adder-bank (sub1 BANKSIZE)) process)
-      (set! Sum-out
-            (for/list ([i BANKSIZE])
-              (send (list-ref full-adder-bank i) get-interface 'Sum-out)
-              ))
-      (set! Carry-out (send (list-ref full-adder-bank (sub1 BANKSIZE)) get-interface 'Carry-out))
-      )
-    
-    (define/public (get-all-fields)
-      (list Carry-in (reverse A-in) (reverse B-in) Carry-out (reverse Sum-out)))
-    
-    (define/public (get-output-fields)
-      (list Carry-out (reverse Sum-out)))
-    
-    (define full-adder-bank
+    (define full-adder-bank ; 8 adders, numbered 0-7. 7 has the least significant bit
       (for/list ([i BANKSIZE])
         (new full-adder%)))
     
-    (define connector-list
+    (define connector-list ; 7 connectors
       (for/list ([i (sub1 BANKSIZE)])
         (make-object connector%
-          (list-ref full-adder-bank i) 'Carry-out
-          (list-ref full-adder-bank (add1 i)) 'Carry-in)))
+          (list-ref full-adder-bank (add1 i)) 'Carry-out
+          (list-ref full-adder-bank i) 'Carry-in)))
     
-    (field [transistor-count
-            (foldl
-             +
-             0
-             (map (lambda (adder)
-                    (get-field transistor-count adder))
-                  full-adder-bank)
-             )])
+    (send this initialize-input! '(Carry-in A-in B-in) '(0 (0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0)))
+    (send this initialize-output! '(Sum-out Carry-out) '((0 0 0 0 0 0 0 0) 0))
+    (send this set-transistor-count!
+          (foldl
+           +
+           0
+           (map (lambda (adder)
+                  (get-field transistor-count adder))
+                full-adder-bank)))         
+    
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
+      (cond ((eq? interface 'Carry-in)
+             (send (list-ref full-adder-bank (sub1 BANKSIZE)) set-input! 'Carry-in value))
+            ((eq? interface 'A-in)
+             (for ([i BANKSIZE])
+               (send (list-ref full-adder-bank i) set-input! 'A-in (list-ref value i))))
+            ((eq? interface 'B-in)
+             (for ([i BANKSIZE])
+               (send (list-ref full-adder-bank i) set-input! 'B-in (list-ref value i))))
+            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
+    
+    (define/override (process)
+      (for ([i (reverse (range 1 BANKSIZE))])
+        (send (list-ref full-adder-bank i) process)
+        (send (list-ref connector-list (sub1 i)) process)
+        )
+      (send (list-ref full-adder-bank 0) process)
+      (send this set-output! 'Sum-out
+            (for/list ([i BANKSIZE])
+              (send (list-ref full-adder-bank i) get-output 'Sum-out)))
+      (send this set-output! 'Carry-out (send (list-ref full-adder-bank 0)
+                                              get-output 'Carry-out)))        
     ))
 
 (define R-S-flip-flop%
-  (class object%
+  (class basic-element%
     (super-new)
-    (init-field [R-in 0] [S-in 0] [Q 0] [Q-bar 1])
     
-    (define/public (get-interface interface)
-      (cond ((eq? interface 'Q) Q)
-            ((eq? interface 'Q-bar) Q-bar)
-            (else (error "get-interface --- unknown interface name"))))
-    
-    (define/public (set!-interface interface value)
-      (cond ((eq? interface 'R-in)
-             (set! R-in value)
-             (send nor-gate-1 set!-interface 'A-in value))
-            ((eq? interface 'S-in)
-             (set! S-in value)
-             (send nor-gate-2 set!-interface 'B-in value))
-            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
-    
-    (define/public (set-input-fields! R-in-value S-in-value)
-      (set!-interface 'R-in R-in-value)
-      (set!-interface 'S-in S-in-value))
-    
-    (define/public (process)
-      (send nor-gate-1 process) (send connector-1 process)
-      (send nor-gate-2 process) (send connector-2 process)
-      (send nor-gate-1 process) (send connector-1 process)
-      (set! Q (send nor-gate-1 get-interface 'out))
-      (set! Q-bar (send nor-gate-2 get-interface 'out)))
-    
-    (define/public (get-all-fields)
-      (list R-in S-in Q Q-bar))
-    
-    (define/public (get-output-fields)
-      (list Q Q-bar))
+    (inherit-field input-table)
     
     (define nor-gate-1 (new nor-gate%))
     (define nor-gate-2 (new nor-gate%))
-    (define connector-1
-      (make-object connector% nor-gate-1 'out nor-gate-2 'A-in))
-    (define connector-2
-      (make-object connector% nor-gate-2 'out nor-gate-1 'B-in))
+    (define connector-1 (make-object connector% nor-gate-1 'out nor-gate-2 'A-in))
+    (define connector-2 (make-object connector% nor-gate-2 'out nor-gate-1 'B-in))
     
-    (field [transistor-count (+ (get-field transistor-count nor-gate-1)
-                                (get-field transistor-count nor-gate-2))])
+    (send this initialize-input! '(R-in S-in) '(0 0))
+    (send this initialize-output! '(Q Q-bar) '(0 1))
+    (send this set-transistor-count! (+ (get-field transistor-count nor-gate-1)
+                                        (get-field transistor-count nor-gate-2)))
+    
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
+      (cond ((eq? interface 'R-in)
+             (send nor-gate-1 set-input! 'A-in value))
+            ((eq? interface 'S-in)
+             (send nor-gate-2 set-input! 'B-in value))
+            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
+    
+    (define/override (process)
+      (send nor-gate-1 process) (send connector-1 process)
+      (send nor-gate-2 process) (send connector-2 process)
+      (send nor-gate-1 process) (send connector-1 process)
+      (send this set-output! 'Q (send nor-gate-1 get-output 'out))
+      (send this set-output! 'Q-bar (send nor-gate-2 get-output 'out)))
     ))
 
 (define level-triggered-D-type-latch%
-  (class object%
+  (class basic-element%
     (super-new)
-    (init-field [Data-in 0] [Clock-in 0] [Q 0] [Q-bar 1])
     
-    (define/public (get-interface interface)
-      (cond ((eq? interface 'Q) Q)
-            ((eq? interface 'Q-bar) Q-bar)
-            (else (error "get-interface --- unknown interface name"))))
-    
-    (define/public (set!-interface interface value)
-      (cond ((eq? interface 'Data-in)
-             (set! Data-in value)
-             (send inverter set!-interface 'in value)
-             (send and-gate-2 set!-interface 'B-in value))
-            ((eq? interface 'Clock-in)
-             (set! Clock-in value)
-             (send and-gate-1 set!-interface 'B-in value)
-             (send and-gate-2 set!-interface 'A-in value))
-            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
-    
-    (define/public (set-input-fields! Data-in-value Clock-in-value)
-      (set!-interface 'Data-in Data-in-value)
-      (set!-interface 'Clock-in Clock-in-value))
-    
-    (define/public (process)
-      (send inverter process) (send connector-1 process)
-      (send and-gate-1 process) (send connector-2 process)
-      (send and-gate-2 process) (send connector-3 process)
-      (send R-S-flip-flop process) 
-      (set! Q (send R-S-flip-flop get-interface 'Q))
-      (set! Q-bar (send R-S-flip-flop get-interface 'Q-bar)))
-    
-    (define/public (get-all-fields)
-      (list Data-in Clock-in Q Q-bar))
-    
-    (define/public (get-output-fields)
-      (list Q Q-bar))
+    (inherit-field input-table)
     
     (define and-gate-1 (new and-gate%))
     (define and-gate-2 (new and-gate%))
     (define inverter (new inverter%))
     (define R-S-flip-flop (new R-S-flip-flop%))
-    (define connector-1
-      (make-object connector% inverter 'out and-gate-1 'A-in))
-    (define connector-2
-      (make-object connector% and-gate-1 'out R-S-flip-flop 'R-in))
-    (define connector-3
-      (make-object connector% and-gate-2 'out R-S-flip-flop 'S-in))
+    (define connector-1 (make-object connector% inverter 'out and-gate-1 'A-in))
+    (define connector-2 (make-object connector% and-gate-1 'out R-S-flip-flop 'R-in))
+    (define connector-3 (make-object connector% and-gate-2 'out R-S-flip-flop 'S-in))
     
-    (field [transistor-count (+ (get-field transistor-count and-gate-1)
-                                (get-field transistor-count and-gate-2)
-                                (get-field transistor-count inverter)
-                                (get-field transistor-count R-S-flip-flop))])
+    (send this initialize-input! '(Data-in Clock-in) '(0 0))
+    (send this initialize-output! '(Q Q-bar) '(0 1))
+    (send this set-transistor-count! (+ (get-field transistor-count and-gate-1)
+                                        (get-field transistor-count and-gate-2)
+                                        (get-field transistor-count inverter)
+                                        (get-field transistor-count R-S-flip-flop)))
     
+    (define/override (set-input! interface value)
+      (hash-set! input-table interface value)
+      (cond ((eq? interface 'Data-in)
+             (send inverter set-input! 'in value)
+             (send and-gate-2 set-input! 'B-in value))
+            ((eq? interface 'Clock-in)
+             (send and-gate-1 set-input! 'B-in value)
+             (send and-gate-2 set-input! 'A-in value))
+            (else (eprintf "set!-interface --- unknown interface name ~a\n" interface))))
+    
+    (define/override (process)
+      (send inverter process) (send connector-1 process)
+      (send and-gate-1 process) (send connector-2 process)
+      (send and-gate-2 process) (send connector-3 process)
+      (send R-S-flip-flop process) 
+      (send this set-output! 'Q (send R-S-flip-flop get-output 'Q))
+      (send this set-output! 'Q-bar (send R-S-flip-flop get-output 'Q-bar)))    
     ))
 
 
@@ -510,8 +453,8 @@
   (require rackunit)
   
   (define (test-input-output object
-                             input-interfaces
-                             output-interfaces
+                             input-table
+                             output-table
                              test-values
                              transistor-count)
     (for-each
@@ -520,13 +463,13 @@
              [predicted-output-values (cadr input-and-output-values-list)])
          (for-each
           (lambda (input-interface input-value)
-            (send object set-input-interface! input-interface input-value))
-          input-interfaces input-values)                
+            (send object set-input! input-interface input-value))
+          input-table input-values)                
          (send object process)
          (let ([calculated-output-values
                 (map (lambda (output-interface)
-                       (send object get-output-interface output-interface))
-                     output-interfaces)])
+                       (send object get-output output-interface))
+                     output-table)])
            (check-equal? predicted-output-values calculated-output-values)
            )))
      test-values)
@@ -534,8 +477,8 @@
     )
   
   (test-case
-   "relais"  
-   (test-input-output (new relais%) 
+   "relay"  
+   (test-input-output (new relay%) 
                       '(control in) '(Q Q-bar)
                       '(((0 1) (0 1))
                         ((1 1) (1 0))
@@ -634,29 +577,40 @@
                       18)
    )
   
-  ;    (test-basecase-old '8-bit-adder (new 8-bit-adder%)
-  ;                   '(((0 (0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0)) (0 (0 0 0 0 0 0 0 0)))
-  ;                     ((0 (0 0 0 0 1 0 0 1) (0 0 0 0 1 0 0 1)) (0 (0 0 0 1 0 0 1 0)))
-  ;                     ((1 (0 1 1 0 1 0 0 1) (0 1 0 1 1 0 1 1)) (0 (1 1 0 0 0 1 0 1)))
-  ;                     ((1 (1 1 1 1 1 1 1 1) (1 1 1 1 1 1 1 1)) (1 (1 1 1 1 1 1 1 1)))
-  ;                     ))
-  ;    
-  ;    (test-basecase-old 'R-S-flip-flop (new R-S-flip-flop%)
-  ;                   '(((0 0) (1 0))
-  ;                     ((0 1) (1 0))
-  ;                     ((1 0) (0 1))
-  ;                     ((0 0) (0 1)) ; different!
-  ;                     ((0 1) (1 0))
-  ;                     ))
-  ;    
-  ;    (test-basecase-old 'level-triggered-D-type-latch (new level-triggered-D-type-latch%)
-  ;                   '(((0 1) (0 1))
-  ;                     ((0 0) (0 1))
-  ;                     ((1 0) (0 1))
-  ;                     ((1 1) (1 0))
-  ;                     ((0 0) (1 0)) ; different!
-  ;                     ((1 0) (1 0)) ; different!
-  ;                     ))
+  (test-case
+   "8-bit adder"
+   (test-input-output (new 8-bit-adder%)
+                      '(Carry-in A-in B-in) '(Carry-out Sum-out)
+                      '(((0 (0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0)) (0 (0 0 0 0 0 0 0 0)))
+                        ((0 (0 0 0 0 1 0 0 1) (0 0 0 0 1 0 0 1)) (0 (0 0 0 1 0 0 1 0)))
+                        ((1 (0 1 1 0 1 0 0 1) (0 1 0 1 1 0 1 1)) (0 (1 1 0 0 0 1 0 1)))
+                        ((1 (1 1 1 1 1 1 1 1) (1 1 1 1 1 1 1 1)) (1 (1 1 1 1 1 1 1 1))))
+                      144)
+   )
   
+  (test-case
+   "R-S-flip-flop"
+   (test-input-output (new R-S-flip-flop%)
+                      '(R-in S-in) '(Q Q-bar)
+                      '(((0 0) (1 0))
+                        ((0 1) (1 0))
+                        ((1 0) (0 1))
+                        ((0 0) (0 1)) ; different!
+                        ((0 1) (1 0)))
+                      4)
+   )
+  
+  (test-case
+   "level-triggered-D-type-latch"
+   (test-input-output (new level-triggered-D-type-latch%)
+                      '(Data-in Clock-in) '(Q Q-bar)
+                      '(((0 1) (0 1))
+                        ((0 0) (0 1))
+                        ((1 0) (0 1))
+                        ((1 1) (1 0))
+                        ((0 0) (1 0)) ; different!
+                        ((1 0) (1 0))) ; different!
+                      9)
+   )
   
   )
